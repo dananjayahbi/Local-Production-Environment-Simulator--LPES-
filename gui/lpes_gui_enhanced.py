@@ -9,6 +9,7 @@ import subprocess
 import sys
 import os
 import json
+import yaml
 import logging
 from datetime import datetime
 from typing import Optional, Dict, List, Any
@@ -26,7 +27,7 @@ class LPESApiManager:
     def __init__(self, lpes_path: str):
         self.lpes_path = Path(lpes_path)
         # Default to src/main.py for the new structure
-        self.main_script = self.lpes_path.parent / "src" / "main.py"
+        self.main_script = self.lpes_path / "src" / "main.py"
         if not self.main_script.exists():
             # Fallback to old structure
             self.main_script = self.lpes_path / "main.py"
@@ -67,34 +68,90 @@ class LPESApiManager:
             }
     
     def list_projects(self) -> List[Dict[str, str]]:
-        """Get list of projects."""
-        result = self.run_command(["list"])
-        
-        # Parse the table output (in a real implementation, we'd want JSON output)
+        """Get list of projects by reading config files directly."""
         projects = []
-        if result['success'] and result['stdout']:
-            lines = result['stdout'].split('\n')
-            for line in lines:
-                # This is a simplified parser for the table output
-                # In a real implementation, LPES should have a --json flag
-                if '│' in line and not line.startswith('┏') and not line.startswith('┡'):
-                    parts = [p.strip() for p in line.split('│') if p.strip()]
-                    if len(parts) >= 5:
-                        projects.append({
-                            'name': parts[0],
-                            'domain': parts[1],
-                            'status': parts[2],
-                            'port': parts[3],
-                            'type': parts[4]
-                        })
+        
+        try:
+            # Read projects directly from config directory to avoid CLI Unicode issues
+            import yaml
+            from pathlib import Path
+            
+            config_dir = Path.home() / ".lpes" / "projects"
+            
+            if config_dir.exists():
+                for config_file in config_dir.glob("*.yaml"):
+                    try:
+                        with open(config_file, 'r', encoding='utf-8') as f:
+                            project_data = yaml.safe_load(f)
+                            
+                        project_name = config_file.stem
+                        
+                        # Extract project info from config
+                        project_info = {
+                            'name': project_name,
+                            'domain': 'Not configured',
+                            'status': 'Stopped',
+                            'port': str(project_data.get('start', {}).get('port', '3000')),
+                            'type': project_data.get('project', {}).get('type', 'nextjs')
+                        }
+                        
+                        # Check if there are domains configured
+                        domains = project_data.get('domains', [])
+                        if domains:
+                            project_info['domain'] = domains[0].get('name', 'Not configured')
+                        
+                        projects.append(project_info)
+                        
+                    except Exception as e:
+                        print(f"Error reading project config {config_file}: {e}")
+                        continue
+                        
+        except Exception as e:
+            print(f"Error listing projects: {e}")
+            # Fallback to CLI method
+            result = self.run_command(["list"])
+            
+            # Check both stdout and stderr for project data (due to Unicode issues)
+            output = result['stdout'] if result['stdout'] else result['stderr']
+            
+            if output:
+                lines = output.split('\n')
+                for line in lines:
+                    # This is a simplified parser for the table output
+                    if '│' in line and not line.startswith('┏') and not line.startswith('┡'):
+                        parts = [p.strip() for p in line.split('│') if p.strip()]
+                        if len(parts) >= 5:
+                            projects.append({
+                                'name': parts[0],
+                                'domain': parts[1],
+                                'status': parts[2],
+                                'port': parts[3],
+                                'type': parts[4]
+                            })
         
         return projects
     
     def create_project(self, name: str, path: str, build: str, start: str, port: str) -> bool:
         """Create a new project."""
-        command = ["init", name, "--path", path, "--build", build, "--start", start, "--port", port]
-        result = self.run_command(command)
-        return result['success']
+        try:
+            # Ensure the project directory exists
+            import os
+            os.makedirs(path, exist_ok=True)
+            
+            command = ["init", name, "--path", path, "--build", build, "--start", start, "--port", port]
+            result = self.run_command(command)
+            
+            # Check if project was actually created, even if CLI returned error due to Unicode issues
+            if result['success']:
+                return True
+            elif "Created project" in result['stderr'] or "initialized successfully" in result['stderr']:
+                # Project was created successfully, but CLI failed due to Unicode encoding
+                return True
+            else:
+                return False
+        except Exception as e:
+            print(f"Error creating project directory: {e}")
+            return False
     
     def remove_project(self, name: str, cleanup: bool = True) -> bool:
         """Remove a project."""
@@ -516,7 +573,14 @@ class ModernLPESGui:
                 dialog.destroy()
                 self.refresh_projects()
             else:
-                self.log_to_console(f"Failed to create project '{name}'", "ERROR")
+                # Get more detailed error information
+                result = self.api.run_command(["init", name, "--path", path, "--build", build, "--start", start, "--port", port])
+                error_msg = result.get('stderr', 'Unknown error')
+                if not error_msg:
+                    error_msg = result.get('stdout', 'Command failed without error message')
+                
+                self.log_to_console(f"Failed to create project '{name}': {error_msg}", "ERROR")
+                messagebox.showerror("Project Creation Failed", f"Failed to create project '{name}'.\n\nError: {error_msg}")
         
         ttk.Button(btn_frame, text="✅ Create Project", command=create_project, style='Primary.TButton').pack(side='right', padx=(5, 0))
         ttk.Button(btn_frame, text="❌ Cancel", command=dialog.destroy).pack(side='right')
