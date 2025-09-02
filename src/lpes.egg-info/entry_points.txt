@@ -1,0 +1,3 @@
+[console_scripts]
+lpes = lpes.cli.main:cli
+lpes-gui = lpes.gui_launcher:main
