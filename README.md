@@ -14,12 +14,14 @@ LPES (Local Production Environment Simulator) is a Python-based development tool
 - **Process Management**: Monitor and manage application lifecycle
 - **DNS Resolution**: Local DNS server or hosts file management
 - **Rich CLI Interface**: Comprehensive command-line interface with real-time feedback
+- **🎨 Modern GUI**: Graphical interface for visual project management (NEW!)
 
 ## 📋 Requirements
 
 - Python 3.9 or higher
 - Administrator/sudo privileges (for hosts file modification or port 443 binding)
 - NextJS or other web application project
+- tkinter (for GUI interface - usually included with Python)
 
 ## 🛠️ Installation
 
@@ -45,6 +47,24 @@ python setup.py install
 ```
 
 ## 🚀 Quick Start
+
+### Choose Your Interface
+
+#### 🎨 Option A: Modern GUI Interface (Recommended)
+```bash
+# Launch the modern graphical interface - no more command typing!
+python lpes_gui_enhanced.py
+```
+
+**✨ GUI Features:**
+- 📋 **Visual Project Management**: Create, view, and delete projects with forms
+- 🎮 **One-Click Actions**: Build, start, stop projects with buttons
+- 📟 **Integrated Console**: Real-time logs with color coding
+- 🔄 **Proxy Controls**: Start/stop proxy server visually
+- 🔒 **SSL Management**: Certificate generation and CA trust info
+- 🌐 **Domain Setup**: Auto-create domains with SSL during project creation
+
+#### 💻 Option B: Command Line Interface
 
 ### 1. Initialize a Project
 
